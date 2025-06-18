@@ -218,11 +218,11 @@ const authController = {
     logger.info('Session refreshed successfully');
 
     return ResponseHandler.success(
-      res, 
+      res,
       {
         session: result.session,
         user: result.user
-      }, 
+      },
       result.message
     );
   }),
@@ -346,7 +346,7 @@ const authController = {
 
     const user = await authService.getProfile(userId);
 
-    return ResponseHandler.success(res, { user }, 'Profile retrieved successfully');
+    return ResponseHandler.success(res, user, 'Profile retrieved successfully');
   }),
 
   /**
@@ -382,6 +382,49 @@ const authController = {
    *                   properties:
    *                     user:
    *                       type: object
+   *                       properties:
+   *                         id:
+   *                           type: string
+   *                           format: uuid
+   *                         email:
+   *                           type: string
+   *                         fullName:
+   *                           type: string
+   *                         role:
+   *                           type: string
+   *                         age:
+   *                           type: integer
+   *                         city:
+   *                           type: string
+   *                         jobTitle:
+   *                           type: string
+   *                         hobbies:
+   *                           type: array
+   *                           items:
+   *                             type: string
+   *                         bio:
+   *                           type: string
+   *                         profileToken:
+   *                           type: string
+   *                         isVerified:
+   *                           type: boolean
+   *                         profileCompleted:
+   *                           type: boolean
+   *                         profileCompletionPercentage:
+   *                           type: integer
+   *                         metadata:
+   *                           type: object
+   *                     socialLinks:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           platform:
+   *                             type: string
+   *                           username:
+   *                             type: string
+   *                           url:
+   *                             type: string
    *       400:
    *         description: Invalid input
    *       401:
@@ -391,33 +434,47 @@ const authController = {
    */
   updateProfile: asyncHandler(async (req, res) => {
     const userId = req.user.id;
-    const { 
-      fullName, 
-      age, 
-      city, 
-      jobTitle, 
-      hobbies, 
-      bio, 
-      instagramHandle, 
-      linkedinUrl, 
-      websiteUrl 
+    const {
+      fullName,
+      age,
+      city,
+      jobTitle,
+      hobbies,
+      bio,
+      instagramHandle,
+      linkedinUrl,
+      websiteUrl,
+      gender
     } = req.body;
 
-    const user = await authService.updateProfile(userId, { 
-      fullName, 
-      age, 
-      city, 
-      jobTitle, 
-      hobbies, 
-      bio, 
-      instagramHandle, 
-      linkedinUrl, 
-      websiteUrl 
-    });
+    const result = await authService.updateProfile(
+      userId,
+      {
+        fullName,
+        age,
+        city,
+        jobTitle,
+        hobbies,
+        bio,
+        instagramHandle,
+        linkedinUrl,
+        websiteUrl,
+        gender
+      },
+      req
+    );
+
 
     logger.info(`Profile updated for user: ${userId}`);
 
-    return ResponseHandler.success(res, { user }, 'Profile updated successfully');
+    return ResponseHandler.success(
+      res,
+      {
+        user: result,
+        socialLinks: result.socialLinks
+      },
+      'Profile updated successfully'
+    );
   })
 };
 

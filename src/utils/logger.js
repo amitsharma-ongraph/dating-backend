@@ -9,11 +9,7 @@ const config = require('../configs/envConfig.js');
 // Ensure log directory exists
 const isDevelopment = config.server.env === 'development';
 
-console.log(`Logger initialized in ${isDevelopment ? 'development' : 'production'} mode.`);
-
-const logDir = isDevelopment
-  ? path.resolve(process.cwd(), 'logs')
-  : path.join('/tmp', 'logs');
+const logDir = isDevelopment?path.resolve(process.cwd(), 'logs'):path.join('/tmp', 'logs');
 
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });

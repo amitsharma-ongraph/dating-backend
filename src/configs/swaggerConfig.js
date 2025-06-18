@@ -40,7 +40,14 @@ const options = {
     }
   },
   // Path to the API docs - be specific to avoid duplications
-  apis: ['./src/modules/auth/authRoute.js', './src/modules/auth/authValidator.js']
+  apis: [
+    './src/modules/auth/authRoute.js',
+    './src/modules/auth/authValidator.js',
+    './src/modules/user/photo/photoRoute.js',
+    './src/modules/user/photo/photoValidator.js',
+    './src/modules/user/video/videoRoute.js',
+    './src/modules/user/video/videoValidator.js'
+  ]
 };
 
 const specs = swaggerJsdoc(options);
@@ -50,20 +57,41 @@ const specs = swaggerJsdoc(options);
  * @param {Express} app - Express application
  */
 const setupSwagger = (app) => {
-  // Swagger page
-  app.use(
-    '/api/v1/docs',
-    swaggerUi.serve,
-    swaggerUi.setup(specs, {
-      explorer: true,
-      customCss: '.swagger-ui .topbar { display: none }'
-    })
-  );
+  // Set trust proxy for Vercel
+  app.set('trust proxy', 1);
 
-  // Swagger JSON
+  // Simplified Swagger UI options - no external CDN assets
+  const swaggerUiOptions = {
+    explorer: true,
+    customCss: `
+      .swagger-ui .topbar { display: none }
+      .swagger-ui .info { margin: 50px 0 }
+      .swagger-ui .scheme-container { background: #fafafa; padding: 30px 0 }
+    `,
+    swaggerOptions: {
+      docExpansion: 'none',
+      persistAuthorization: true,
+      displayRequestDuration: true,
+      tryItOutEnabled: true
+    }
+  };
+
+  // Swagger UI route
+  app.use('/api/v1/docs', swaggerUi.serve, swaggerUi.setup(specs, swaggerUiOptions));
+
+  // Swagger JSON route
   app.get('/api/v1/docs.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(specs);
+  });
+
+  // Health check for docs
+  app.get('/api/v1/docs/health', (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      message: 'Swagger documentation is available',
+      docsUrl: '/api/v1/docs' 
+    });
   });
 };
 

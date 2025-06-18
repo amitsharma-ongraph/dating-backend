@@ -13,15 +13,24 @@ const authenticate = async (req, res, next) => {
     // Extract the token from the Authorization header
     const authHeader = req.headers.authorization;
 
+    logger.debug('Auth header received:', authHeader ? 'Present' : 'Missing');
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      logger.warn('Invalid authorization header format', {
+        hasHeader: !!authHeader,
+        headerStart: authHeader ? authHeader.substring(0, 10) + '...' : 'N/A'
+      });
       throw new ApiError(401, 'Authentication required');
     }
 
     const token = authHeader.replace('Bearer ', '');
 
     if (!token) {
+      logger.warn('Empty token after Bearer prefix');
       throw new ApiError(401, 'Authentication required');
     }
+
+    logger.debug('Token extracted, length:', token.length);
 
     // Verify the token with Supabase using admin client
     const adminClient = getAdminClient();
@@ -33,17 +42,20 @@ const authenticate = async (req, res, next) => {
     } = await adminClient.auth.getUser(token);
 
     if (error || !user) {
-      logger.warn('Invalid authentication token', { error: error?.message });
+      logger.warn('Invalid authentication token', { 
+        error: error?.message,
+        hasUser: !!user 
+      });
       throw new ApiError(401, 'Invalid or expired token');
     }
 
     logger.debug(`Authenticated user: ${user.id} (${user.email})`);
 
-    // Get user profile from the database using correct field (id, not user_id)
+    // Get user profile from the database - FIXED TABLE NAME
     const { data: profile, error: profileError } = await adminClient
-      .from('user_profiles')
+      .from('profiles')
       .select('*')
-      .eq('id', user.id)  // Changed from user_id to id
+      .eq('id', user.id)
       .single();
 
     if (profileError) {
@@ -53,26 +65,27 @@ const authenticate = async (req, res, next) => {
         error: profileError.message
       });
 
-      // Create a default profile if it doesn't exist
+      // Create a default profile if it doesn't exist - FIXED TABLE NAME
       const { data: newProfile, error: createError } = await adminClient
-        .from('user_profiles')
+        .from('profiles')
         .insert({
-          id: user.id,  // Use id instead of user_id
+          id: user.id,
           email: user.email.toLowerCase(),
           full_name: user.user_metadata?.full_name || user.email.split('@')[0],
           role: 'USER',
           is_verified: !!user.email_confirmed_at,
-          provider: user.app_metadata?.provider || 'email',
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          // Generate profile token automatically
+          profile_token: `PRO-${Math.random().toString(36).substr(2, 15).toUpperCase()}`
         })
         .select()
         .single();
 
       if (createError) {
-        logger.error('Failed to create user profile', { 
-          userId: user.id, 
-          error: createError.message 
+        logger.error('Failed to create user profile', {
+          userId: user.id,
+          error: createError.message
         });
         throw new ApiError(500, 'Failed to create user profile');
       }
@@ -86,6 +99,7 @@ const authenticate = async (req, res, next) => {
         role: newProfile.role || 'USER',
         fullName: newProfile.full_name || user.user_metadata?.full_name,
         isVerified: newProfile.is_verified,
+        profileToken: newProfile.profile_token,
         profile: newProfile
       };
     } else {
@@ -96,6 +110,7 @@ const authenticate = async (req, res, next) => {
         role: profile.role || 'USER',
         fullName: profile.full_name || user.user_metadata?.full_name,
         isVerified: profile.is_verified,
+        profileToken: profile.profile_token,
         profile: profile
       };
     }
@@ -107,7 +122,14 @@ const authenticate = async (req, res, next) => {
 
     next();
   } catch (error) {
-    logger.error('Authentication middleware error:', error);
+    logger.error('Authentication middleware error:', {
+      message: error.message,
+      stack: error.stack,
+      headers: {
+        authorization: req.headers.authorization ? 'Present' : 'Missing',
+        'user-agent': req.headers['user-agent']
+      }
+    });
     next(error);
   }
 };
@@ -178,9 +200,9 @@ const optionalAuth = async (req, res, next) => {
       return next();
     }
 
-    // Get user profile
+    // Get user profile - FIXED TABLE NAME (was user_profiles, should be profiles)
     const { data: profile } = await adminClient
-      .from('user_profiles')
+      .from('profiles')
       .select('*')
       .eq('id', user.id)
       .single();
@@ -192,6 +214,7 @@ const optionalAuth = async (req, res, next) => {
         role: profile.role || 'USER',
         fullName: profile.full_name || user.user_metadata?.full_name,
         isVerified: profile.is_verified,
+        profileToken: profile.profile_token,
         profile: profile
       };
     } else {
@@ -202,6 +225,9 @@ const optionalAuth = async (req, res, next) => {
     next();
   } catch (error) {
     // On any error, continue without user
+    logger.warn('Optional auth failed, continuing without user', {
+      error: error.message
+    });
     req.user = null;
     req.supabase = getAnonClient();
     next();

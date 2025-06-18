@@ -147,7 +147,6 @@ const validateResetPassword = [
 ];
 
 /**
- * Validation rules for profile update
  * @swagger
  * components:
  *   schemas:
@@ -170,6 +169,10 @@ const validateResetPassword = [
  *           type: string
  *           maxLength: 100
  *           description: User's job title
+ *         gender:
+ *           type: string
+ *           enum: [male, female, other]
+ *           description: User's gender
  *         hobbies:
  *           type: array
  *           items:
@@ -217,6 +220,12 @@ const validateUpdateProfile = [
     .isLength({ max: 100 })
     .withMessage('Job title must be less than 100 characters'),
   
+  body('gender')
+    .optional()
+    .trim()
+    .isIn(['Male', 'Female', 'Other'])
+    .withMessage('Gender must be either male, female, or other'),
+  
   body('hobbies')
     .optional()
     .isArray({ max: 10 })
@@ -237,22 +246,29 @@ const validateUpdateProfile = [
   body('instagramHandle')
     .optional()
     .trim()
-    .isLength({ max: 30 })
-    .withMessage('Instagram handle must be less than 30 characters')
-    .matches(/^[a-zA-Z0-9._]+$/)
-    .withMessage('Instagram handle can only contain letters, numbers, dots, and underscores'),
+    .custom((value) => {
+      if (value === '' || value === null || value === undefined) return true;
+      return /^[a-zA-Z0-9._]+$/.test(value);
+    })
+    .withMessage('Instagram handle can only contain letters, numbers, dots, and underscores, or be empty'),
   
   body('linkedinUrl')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('LinkedIn URL must be a valid URL'),
+    .custom((value) => {
+      if (value === '' || value === null || value === undefined) return true;
+      return /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/.test(value);
+    })
+    .withMessage('LinkedIn URL must be a valid URL or empty'),
   
   body('websiteUrl')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Website URL must be a valid URL')
+    .custom((value) => {
+      if (value === '' || value === null || value === undefined) return true;
+      return /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/.test(value);
+    })
+    .withMessage('Website URL must be a valid URL or empty')
 ];
 
 /**

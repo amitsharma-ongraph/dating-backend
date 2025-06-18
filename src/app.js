@@ -1,4 +1,3 @@
-// src/app.js
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const config = require('./configs/envConfig');
@@ -13,6 +12,9 @@ const apiRoutes = require('./modules/mainRoute');
 const bootstrapApp = async () => {
   const app = express();
 
+  // 🛠️ Fix: Trust proxy for accurate client IP (needed for express-rate-limit)
+  app.set('trust proxy', 1);
+
   // Standard parsing & compression middleware
   standardMiddleware(app);
 
@@ -21,7 +23,6 @@ const bootstrapApp = async () => {
 
   // Unified response helper methods
   app.use((req, res, next) => {
-    // Attach response handler methods to response object
     res.success = (data, message, statusCode) =>
       ResponseHandler.success(res, data, message, statusCode);
     res.error = (message, statusCode, errors) =>
