@@ -99,7 +99,7 @@ const videoController = {
   uploadVideo: asyncHandler(async (req, res) => {
     const userId = req.user.id;
     const file = req.file;
-    const { videoType } = req.body;
+    const { videoType, title } = req.body;
 
     if (!file) {
       return ResponseHandler.error(res, 'No video file provided', 400);
@@ -110,9 +110,8 @@ const videoController = {
     }
 
     try {
-      // We'll ignore duration and thumbnailTimestamp even if they're sent
-      // They'll be handled internally
-      const video = await videoService.uploadVideo(userId, file, videoType);
+      // Pass title to the service (required for custom, optional for default)
+      const video = await videoService.uploadVideo(userId, file, videoType, title);
 
       logger.info(`Video uploaded for user ${userId}: ${video.id}`);
 

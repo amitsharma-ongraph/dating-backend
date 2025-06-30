@@ -1,6 +1,6 @@
 // src/modules/auth/authService.js
 const { getAnonClient, getAdminClient } = require('../../configs/supabaseConfig');
-const { logger } = require('../../utils/logger');
+const { colorLogger } = require('../../utils/logger');
 const ApiError = require('../../utils/apiError');
 const config = require('../../configs/envConfig');
 
@@ -19,7 +19,7 @@ const getClientIp = (req) => {
     // Otherwise, return null as we can't determine the IP
     return null;
   } catch (error) {
-    logger.warn('Failed to get client IP:', error);
+    colorLogger.warn('Failed to get client IP:', error);
     return null;
   }
 };
@@ -36,7 +36,7 @@ const getUserAgent = (req) => {
     }
     return null;
   } catch (error) {
-    logger.warn('Failed to get user agent:', error);
+    colorLogger.warn('Failed to get user agent:', error);
     return null;
   }
 };
@@ -94,7 +94,7 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
     } = await adminClient.auth.admin.listUsers();
 
     if (getUserError) {
-      logger.error('Error checking existing users:', getUserError);
+      colorLogger.error('Error checking existing users:', getUserError);
       throw new ApiError(500, 'Failed to verify user existence');
     }
 
@@ -119,7 +119,7 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
     });
 
     if (authError) {
-      logger.error('Auth signup error:', authError);
+      colorLogger.error('Auth signup error:', authError);
       throw new ApiError(400, authError.message);
     }
 
@@ -127,7 +127,7 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
       throw new ApiError(400, 'Failed to create user account');
     }
 
-    logger.info(`Auth user created: ${authData.user.id}`);
+    colorLogger.info(`Auth user created: ${authData.user.id}`);
 
     // 3. Wait briefly to allow the trigger to run (reduced from 2 seconds to 1)
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -140,7 +140,7 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
       .single();
 
     if (profileError) {
-      logger.warn('Profile not created by trigger, creating manually:', profileError);
+      colorLogger.warn('Profile not created by trigger, creating manually:', profileError);
 
       // 5. Try generating a profile token
       let profileToken;
@@ -152,7 +152,7 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
       } catch (tokenGenError) {
         // Fallback to a simple token if RPC fails
         profileToken = `PRO-${Math.random().toString(36).substring(2, 15)}`;
-        logger.warn(
+        colorLogger.warn(
           `Failed to generate profile token via RPC: ${tokenGenError.message}. Using fallback.`
         );
       }
@@ -175,7 +175,7 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
         .single();
 
       if (createError) {
-        logger.error('Failed to create profile:', createError);
+        colorLogger.error('Failed to create profile:', createError);
 
         // 7. Delete the auth user since we couldn't create a profile
         await adminClient.auth.admin.deleteUser(authData.user.id);
@@ -194,7 +194,7 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
           metadata: { created_by: 'registration' }
         });
       } catch (logError) {
-        logger.warn(`Failed to log token creation: ${logError.message}`);
+        colorLogger.warn(`Failed to log token creation: ${logError.message}`);
       }
 
       // 9. Log signup event
@@ -207,10 +207,10 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
           metadata: { provider: 'email' }
         });
       } catch (auditError) {
-        logger.warn(`Failed to log signup event: ${auditError.message}`);
+        colorLogger.warn(`Failed to log signup event: ${auditError.message}`);
       }
 
-      logger.info(`Profile created manually for user: ${authData.user.id}`);
+      colorLogger.info(`Profile created manually for user: ${authData.user.id}`);
 
       return {
         user: sanitizeUser(authData.user, newProfile),
@@ -229,10 +229,10 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
         metadata: { provider: 'email' }
       });
     } catch (auditError) {
-      logger.warn(`Failed to log signup event: ${auditError.message}`);
+      colorLogger.warn(`Failed to log signup event: ${auditError.message}`);
     }
 
-    logger.info(`Profile found/created for user: ${authData.user.id}`);
+    colorLogger.info(`Profile found/created for user: ${authData.user.id}`);
 
     return {
       user: sanitizeUser(authData.user, profile),
@@ -240,7 +240,7 @@ const register = async ({ email, password, fullName, ip, userAgent }) => {
       message: 'Registration successful. Please verify your email.'
     };
   } catch (error) {
-    logger.error('Registration error:', error);
+    colorLogger.error('Registration error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Registration failed: ' + error.message);
   }
@@ -257,7 +257,7 @@ const login = async ({ email, password }, req) => {
   const adminClient = getAdminClient();
 
   try {
-    logger.info(`Attempting login for user: ${email}`);
+    colorLogger.info(`Attempting login for user: ${email}`);
 
     // 1. Sign in with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -266,7 +266,7 @@ const login = async ({ email, password }, req) => {
     });
 
     if (authError) {
-      logger.error('Login error:', authError);
+      colorLogger.error('Login error:', authError);
 
       if (authError.message.includes('Email not confirmed')) {
         throw new ApiError(401, 'Please verify your email before logging in');
@@ -278,11 +278,11 @@ const login = async ({ email, password }, req) => {
     }
 
     if (!authData || !authData.user) {
-      logger.error('Login failed: No user data returned');
+      colorLogger.error('Login failed: No user data returned');
       throw new ApiError(401, 'Authentication failed');
     }
 
-    logger.info(`User authenticated successfully: ${authData.user.id}`);
+    colorLogger.info(`User authenticated successfully: ${authData.user.id}`);
 
     // 2. Get user profile using admin client to bypass RLS
     const { data: profile, error: profileError } = await adminClient
@@ -292,7 +292,7 @@ const login = async ({ email, password }, req) => {
       .single();
 
     if (profileError) {
-      logger.error(`User profile not found for ${authData.user.id}:`, profileError);
+      colorLogger.error(`User profile not found for ${authData.user.id}:`, profileError);
       throw new ApiError(404, 'User profile not found. Please complete registration process.');
     }
 
@@ -315,10 +315,10 @@ const login = async ({ email, password }, req) => {
         metadata: { method: 'password' }
       });
     } catch (auditError) {
-      logger.warn('Failed to log audit event:', auditError);
+      colorLogger.warn('Failed to log audit event:', auditError);
     }
 
-    logger.info(`Login successful for user: ${email} with role: ${profile.role}`);
+    colorLogger.info(`Login successful for user: ${email} with role: ${profile.role}`);
 
     return {
       user: sanitizeUser(authData.user, profile),
@@ -326,7 +326,7 @@ const login = async ({ email, password }, req) => {
       message: 'Login successful'
     };
   } catch (error) {
-    logger.error('Login error:', error);
+    colorLogger.error('Login error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Login failed: ' + error.message);
   }
@@ -356,7 +356,7 @@ const logout = async (userId = null, req = null) => {
             metadata: {}
           });
       } catch (auditError) {
-        logger.warn('Failed to log logout event:', auditError);
+        colorLogger.warn('Failed to log logout event:', auditError);
         // Continue with logout even if logging fails
       }
     }
@@ -370,7 +370,7 @@ const logout = async (userId = null, req = null) => {
       : await supabase.auth.signOut();
       
     if (error) {
-      logger.error('Logout error:', error);
+      colorLogger.error('Logout error:', error);
       throw new ApiError(500, 'Logout failed: ' + error.message);
     }
 
@@ -389,14 +389,14 @@ const logout = async (userId = null, req = null) => {
           .onConflict('token')
           .ignore();
       } catch (blacklistError) {
-        logger.warn('Failed to blacklist token:', blacklistError);
+        colorLogger.warn('Failed to blacklist token:', blacklistError);
       }
     }
 
-    logger.info(`User logout successful: ${userId || 'Anonymous'}`);
+    colorLogger.info(`User logout successful: ${userId || 'Anonymous'}`);
     return { message: 'Logout successful' };
   } catch (error) {
-    logger.error('Logout error:', error);
+    colorLogger.error('Logout error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Logout failed');
   }
@@ -412,7 +412,7 @@ const refreshSession = async (refreshToken) => {
   const adminClient = getAdminClient();
 
   try {
-    logger.info('Attempting to refresh session');
+    colorLogger.info('Attempting to refresh session');
 
     // First, try to refresh the session
     const { data, error } = await supabase.auth.refreshSession({
@@ -420,12 +420,12 @@ const refreshSession = async (refreshToken) => {
     });
 
     if (error) {
-      logger.error('Session refresh error:', error);
+      colorLogger.error('Session refresh error:', error);
       throw new ApiError(401, 'Invalid or expired refresh token');
     }
 
     if (!data.session || !data.session.access_token) {
-      logger.error('No session data returned from refresh');
+      colorLogger.error('No session data returned from refresh');
       throw new ApiError(401, 'Failed to refresh session');
     }
 
@@ -435,7 +435,7 @@ const refreshSession = async (refreshToken) => {
     );
 
     if (userError || !userData.user) {
-      logger.error('Failed to get user after refresh:', userError);
+      colorLogger.error('Failed to get user after refresh:', userError);
       throw new ApiError(401, 'Failed to validate refreshed session');
     }
 
@@ -448,13 +448,13 @@ const refreshSession = async (refreshToken) => {
 
     // If profile not found, just log the error but don't fail the refresh
     if (profileError) {
-      logger.warn(
+      colorLogger.warn(
         `Could not fetch profile during refresh for user ${userData.user.id}:`,
         profileError
       );
     }
 
-    logger.info(`Session refreshed successfully for user: ${userData.user.email}`);
+    colorLogger.info(`Session refreshed successfully for user: ${userData.user.email}`);
 
     return {
       session: data.session,
@@ -462,7 +462,7 @@ const refreshSession = async (refreshToken) => {
       message: 'Session refreshed successfully'
     };
   } catch (error) {
-    logger.error('Refresh session error:', error);
+    colorLogger.error('Refresh session error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Session refresh failed');
   }
@@ -485,7 +485,7 @@ const forgotPassword = async (email, req) => {
     });
 
     if (error) {
-      logger.error('Failed to send reset email:', error);
+      colorLogger.error('Failed to send reset email:', error);
     } else {
       try {
         const { data: profile } = await adminClient
@@ -504,17 +504,17 @@ const forgotPassword = async (email, req) => {
           });
         }
       } catch (logError) {
-        logger.warn('Failed to log password reset request:', logError);
+        colorLogger.warn('Failed to log password reset request:', logError);
       }
     }
 
-    logger.info(`Password reset requested for: ${email}`);
+    colorLogger.info(`Password reset requested for: ${email}`);
 
     return {
       message: 'Password reset link has been sent. Please check your email.'
     };
   } catch (error) {
-    logger.error('Forgot password error:', error);
+    colorLogger.error('Forgot password error:', error);
     return {
       message: 'If an account exists with this email, a password reset link will be sent.'
     };
@@ -540,7 +540,7 @@ const resetPassword = async (token, newPassword, req) => {
     });
 
     if (verifyError) {
-      logger.error('Token verification error:', verifyError);
+      colorLogger.error('Token verification error:', verifyError);
       throw new ApiError(400, 'Invalid or expired reset token: ' + verifyError.message);
     }
 
@@ -550,7 +550,7 @@ const resetPassword = async (token, newPassword, req) => {
     });
 
     if (error) {
-      logger.error('Password reset error:', error);
+      colorLogger.error('Password reset error:', error);
       throw new ApiError(400, 'Password reset failed: ' + error.message);
     }
 
@@ -566,16 +566,16 @@ const resetPassword = async (token, newPassword, req) => {
         });
       }
     } catch (logError) {
-      logger.warn('Failed to log password reset completion:', logError);
+      colorLogger.warn('Failed to log password reset completion:', logError);
     }
 
-    logger.info('Password reset successful');
+    colorLogger.info('Password reset successful');
 
     return {
       message: 'Password has been reset successfully'
     };
   } catch (error) {
-    logger.error('Reset password error:', error);
+    colorLogger.error('Reset password error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Password reset failed');
   }
@@ -595,13 +595,13 @@ const getSession = async () => {
     } = await supabase.auth.getSession();
 
     if (error) {
-      logger.error('Get session error:', error);
+      colorLogger.error('Get session error:', error);
       throw new ApiError(401, 'Failed to get session');
     }
 
     return session;
   } catch (error) {
-    logger.error('Get session error:', error);
+    colorLogger.error('Get session error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to get session');
   }
@@ -623,7 +623,7 @@ const getProfile = async (userId) => {
     } = await adminClient.auth.admin.getUserById(userId);
 
     if (userError) {
-      logger.error('Failed to get auth user:', userError);
+      colorLogger.error('Failed to get auth user:', userError);
       throw new ApiError(401, 'Failed to get user');
     }
 
@@ -635,7 +635,7 @@ const getProfile = async (userId) => {
       .single();
 
     if (profileError) {
-      logger.error('Profile not found:', profileError);
+      colorLogger.error('Profile not found:', profileError);
       throw new ApiError(404, 'Profile not found');
     }
 
@@ -647,7 +647,7 @@ const getProfile = async (userId) => {
       .order('photo_order', { ascending: true });
 
     if (photosError) {
-      logger.warn('Failed to fetch user photos:', photosError);
+      colorLogger.warn('Failed to fetch user photos:', photosError);
       // Continue without photos rather than failing the whole request
     }
 
@@ -658,7 +658,7 @@ const getProfile = async (userId) => {
       .eq('user_id', userId);
 
     if (socialLinksError) {
-      logger.warn('Failed to fetch user social links:', socialLinksError);
+      colorLogger.warn('Failed to fetch user social links:', socialLinksError);
       // Continue without social links
     }
 
@@ -674,7 +674,7 @@ const getProfile = async (userId) => {
       .single();
 
     if (videoError && !videoError.message.includes('No rows found')) {
-      logger.warn('Failed to fetch user default video:', videoError);
+      colorLogger.warn('Failed to fetch user default video:', videoError);
       // Continue without default video
     }
 
@@ -692,7 +692,7 @@ const getProfile = async (userId) => {
 
     return completeProfile;
   } catch (error) {
-    logger.error('Get profile error:', error);
+    colorLogger.error('Get profile error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to get profile');
   }
@@ -735,7 +735,7 @@ const updateProfile = async (
     });
 
     if (authError) {
-      logger.error('Failed to update auth user:', authError);
+      colorLogger.error('Failed to update auth user:', authError);
       throw new ApiError(400, 'Failed to update user metadata');
     }
 
@@ -766,7 +766,7 @@ const updateProfile = async (
       .single();
 
     if (profileError) {
-      logger.error('Failed to update profile:', profileError);
+      colorLogger.error('Failed to update profile:', profileError);
       throw new ApiError(400, 'Failed to update profile');
     }
 
@@ -834,7 +834,7 @@ const updateProfile = async (
       // Log any errors with social link updates but don't fail the whole operation
       socialResults.forEach((result, index) => {
         if (result.status === 'rejected') {
-          logger.warn(`Failed to update social link #${index}:`, result.reason);
+          colorLogger.warn(`Failed to update social link #${index}:`, result.reason);
         }
       });
     }
@@ -861,7 +861,7 @@ const updateProfile = async (
           }
         });
     } catch (logError) {
-      logger.warn('Failed to log profile update:', logError);
+      colorLogger.warn('Failed to log profile update:', logError);
     }
 
     // 6. Get updated auth user
@@ -875,7 +875,7 @@ const updateProfile = async (
       .select('*')
       .eq('user_id', userId);
 
-    logger.info(`Profile updated for user: ${userId}`);
+    colorLogger.info(`Profile updated for user: ${userId}`);
 
     // 8. Return complete user profile with updated social links
     const updatedProfile = sanitizeUser(user, profile);
@@ -884,7 +884,7 @@ const updateProfile = async (
       socialLinks: socialLinks || []
     };
   } catch (error) {
-    logger.error('Update profile error:', error);
+    colorLogger.error('Update profile error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to update profile');
   }
@@ -907,7 +907,7 @@ const verifyEmail = async (token) => {
     });
 
     if (error) {
-      logger.error('Email verification error:', error);
+      colorLogger.error('Email verification error:', error);
       throw new ApiError(400, 'Invalid or expired verification link');
     }
 
@@ -932,17 +932,17 @@ const verifyEmail = async (token) => {
         metadata: { method: 'email_verification' }
       });
     } catch (logError) {
-      logger.warn('Failed to log email verification:', logError);
+      colorLogger.warn('Failed to log email verification:', logError);
     }
 
-    logger.info(`Email verified for user: ${data.user.id}`);
+    colorLogger.info(`Email verified for user: ${data.user.id}`);
 
     return {
       user: data.user,
       message: 'Email verified successfully'
     };
   } catch (error) {
-    logger.error('Email verification error:', error);
+    colorLogger.error('Email verification error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Email verification failed: ' + error.message);
   }
@@ -968,7 +968,7 @@ const changePassword = async (userId, currentPassword, newPassword, req) => {
     });
 
     if (authError || !authData.user) {
-      logger.error('Current password verification failed:', authError);
+      colorLogger.error('Current password verification failed:', authError);
       throw new ApiError(401, 'Current password is incorrect');
     }
 
@@ -978,7 +978,7 @@ const changePassword = async (userId, currentPassword, newPassword, req) => {
     });
 
     if (error) {
-      logger.error('Password change error:', error);
+      colorLogger.error('Password change error:', error);
       throw new ApiError(400, 'Failed to change password: ' + error.message);
     }
 
@@ -992,16 +992,16 @@ const changePassword = async (userId, currentPassword, newPassword, req) => {
         metadata: {}
       });
     } catch (logError) {
-      logger.warn('Failed to log password change:', logError);
+      colorLogger.warn('Failed to log password change:', logError);
     }
 
-    logger.info(`Password changed for user: ${userId}`);
+    colorLogger.info(`Password changed for user: ${userId}`);
 
     return {
       message: 'Password changed successfully'
     };
   } catch (error) {
-    logger.error('Change password error:', error);
+    colorLogger.error('Change password error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to change password: ' + error.message);
   }
@@ -1030,7 +1030,7 @@ const setAccountStatus = async (userId, active, req) => {
       .single();
 
     if (profileError) {
-      logger.error('Failed to update account status:', profileError);
+      colorLogger.error('Failed to update account status:', profileError);
       throw new ApiError(400, 'Failed to update account status');
     }
 
@@ -1044,17 +1044,17 @@ const setAccountStatus = async (userId, active, req) => {
         metadata: { by: req.user?.id || 'system' }
       });
     } catch (logError) {
-      logger.warn('Failed to log account status change:', logError);
+      colorLogger.warn('Failed to log account status change:', logError);
     }
 
-    logger.info(`Account ${active ? 'activated' : 'deactivated'} for user: ${userId}`);
+    colorLogger.info(`Account ${active ? 'activated' : 'deactivated'} for user: ${userId}`);
 
     return {
       message: `Account ${active ? 'activated' : 'deactivated'} successfully`,
       user: profile
     };
   } catch (error) {
-    logger.error('Set account status error:', error);
+    colorLogger.error('Set account status error:', error);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to update account status: ' + error.message);
   }

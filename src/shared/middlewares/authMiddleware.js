@@ -1,7 +1,7 @@
 // src/shared/middlewares/authMiddleware.js
-const { getAnonClient, getAdminClient } = require('../../configs/supabaseConfig');
+const { getAdminClient } = require('../../configs/supabaseConfig');
 const ApiError = require('../../utils/apiError');
-const { logger } = require('../../utils/logger');
+const { colorLogger } = require('../../utils/logger');
 
 /**
  * Authentication middleware to protect routes
@@ -13,10 +13,10 @@ const authenticate = async (req, res, next) => {
     // Extract the token from the Authorization header
     const authHeader = req.headers.authorization;
 
-    logger.debug('Auth header received:', authHeader ? 'Present' : 'Missing');
+    colorLogger.debug('Auth header received:', authHeader ? 'Present' : 'Missing');
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      logger.warn('Invalid authorization header format', {
+      colorLogger.warn('Invalid authorization header format', {
         hasHeader: !!authHeader,
         headerStart: authHeader ? authHeader.substring(0, 10) + '...' : 'N/A'
       });
@@ -26,11 +26,11 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.replace('Bearer ', '');
 
     if (!token) {
-      logger.warn('Empty token after Bearer prefix');
+      colorLogger.warn('Empty token after Bearer prefix');
       throw new ApiError(401, 'Authentication required');
     }
 
-    logger.debug('Token extracted, length:', token.length);
+    colorLogger.debug('Token extracted, length:', token.length);
 
     // Verify the token with Supabase using admin client
     const adminClient = getAdminClient();
@@ -42,14 +42,14 @@ const authenticate = async (req, res, next) => {
     } = await adminClient.auth.getUser(token);
 
     if (error || !user) {
-      logger.warn('Invalid authentication token', { 
+      colorLogger.warn('Invalid authentication token', {
         error: error?.message,
-        hasUser: !!user 
+        hasUser: !!user
       });
       throw new ApiError(401, 'Invalid or expired token');
     }
 
-    logger.debug(`Authenticated user: ${user.id} (${user.email})`);
+    colorLogger.debug(`Authenticated user: ${user.id} (${user.email})`);
 
     // Get user profile from the database - FIXED TABLE NAME
     const { data: profile, error: profileError } = await adminClient
@@ -59,7 +59,7 @@ const authenticate = async (req, res, next) => {
       .single();
 
     if (profileError) {
-      logger.warn('User profile not found for authenticated user', {
+      colorLogger.warn('User profile not found for authenticated user', {
         userId: user.id,
         email: user.email,
         error: profileError.message
@@ -83,14 +83,14 @@ const authenticate = async (req, res, next) => {
         .single();
 
       if (createError) {
-        logger.error('Failed to create user profile', {
+        colorLogger.error('Failed to create user profile', {
           userId: user.id,
           error: createError.message
         });
         throw new ApiError(500, 'Failed to create user profile');
       }
 
-      logger.info(`Created new profile for user: ${user.id}`);
+      colorLogger.info(`Created new profile for user: ${user.id}`);
 
       // Attach user and role to request object
       req.user = {
@@ -118,11 +118,11 @@ const authenticate = async (req, res, next) => {
     // Create and attach a supabase client for the user
     req.supabase = adminClient;
 
-    logger.debug(`User authenticated successfully: ${req.user.email} (${req.user.role})`);
+    colorLogger.debug(`User authenticated successfully: ${req.user.email} (${req.user.role})`);
 
     next();
   } catch (error) {
-    logger.error('Authentication middleware error:', {
+    colorLogger.error('Authentication middleware error:', {
       message: error.message,
       stack: error.stack,
       headers: {
@@ -147,7 +147,7 @@ const authorize = (roles = []) => {
       }
 
       if (roles.length && !roles.includes(req.user.role)) {
-        logger.warn('Unauthorized access attempt', {
+        colorLogger.warn('Unauthorized access attempt', {
           userId: req.user.id,
           userRole: req.user.role,
           requiredRoles: roles,
@@ -163,79 +163,7 @@ const authorize = (roles = []) => {
   };
 };
 
-/**
- * Optional authentication middleware
- * Tries to authenticate but doesn't fail if no token provided
- */
-const optionalAuth = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      // No auth header, continue without user
-      req.user = null;
-      req.supabase = getAnonClient();
-      return next();
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-
-    if (!token) {
-      req.user = null;
-      req.supabase = getAnonClient();
-      return next();
-    }
-
-    // Try to authenticate
-    const adminClient = getAdminClient();
-    const {
-      data: { user },
-      error
-    } = await adminClient.auth.getUser(token);
-
-    if (error || !user) {
-      // Invalid token, continue without user
-      req.user = null;
-      req.supabase = getAnonClient();
-      return next();
-    }
-
-    // Get user profile - FIXED TABLE NAME (was user_profiles, should be profiles)
-    const { data: profile } = await adminClient
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (profile) {
-      req.user = {
-        id: user.id,
-        email: user.email,
-        role: profile.role || 'USER',
-        fullName: profile.full_name || user.user_metadata?.full_name,
-        isVerified: profile.is_verified,
-        profileToken: profile.profile_token,
-        profile: profile
-      };
-    } else {
-      req.user = null;
-    }
-
-    req.supabase = adminClient;
-    next();
-  } catch (error) {
-    // On any error, continue without user
-    logger.warn('Optional auth failed, continuing without user', {
-      error: error.message
-    });
-    req.user = null;
-    req.supabase = getAnonClient();
-    next();
-  }
-};
-
 module.exports = {
   authenticate,
-  authorize,
-  optionalAuth
+  authorize
 };

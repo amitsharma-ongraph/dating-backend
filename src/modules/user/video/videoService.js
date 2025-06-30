@@ -1,8 +1,8 @@
 // src/modules/user/video/videoService.js
-const { getAdminClient, getAuthenticatedClient } = require('../../../configs/supabaseConfig');
-const { logger } = require('../../../utils/logger');
+const { getAdminClient } = require('../../../configs/supabaseConfig');
+const { colorLogger } = require('../../../utils/logger');
 const ApiError = require('../../../utils/apiError');
-const config = require('../../../configs/envConfig');
+const config = require('../../../configs/envConfig.js');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 
@@ -33,10 +33,10 @@ const updateProfileCompletionPercentage = async (userId) => {
       .eq('id', userId);
 
     if (error) {
-      logger.warn(`Failed to update profile completion: ${error.message}`);
+      colorLogger.warn(`Failed to update profile completion: ${error.message}`);
     }
   } catch (error) {
-    logger.warn(`Error updating profile completion: ${error.message}`);
+    colorLogger.warn(`Error updating profile completion: ${error.message}`);
   }
 };
 
@@ -52,7 +52,7 @@ const ensureVideosBucketExists = async () => {
     const { data: buckets, error: listError } = await adminClient.storage.listBuckets();
 
     if (listError) {
-      logger.error(`Error listing buckets: ${listError.message}`);
+      colorLogger.error(`Error listing buckets: ${listError.message}`);
       throw new ApiError(500, 'Failed to access storage');
     }
 
@@ -67,16 +67,16 @@ const ensureVideosBucketExists = async () => {
       });
 
       if (createError) {
-        logger.error(`Error creating bucket: ${createError.message}`);
+        colorLogger.error(`Error creating bucket: ${createError.message}`);
         throw new ApiError(500, 'Failed to create storage bucket');
       }
 
-      logger.info(`Created '${VIDEO_BUCKET}' bucket`);
+      colorLogger.info(`Created '${VIDEO_BUCKET}' bucket`);
     }
 
     return true;
   } catch (error) {
-    logger.error(`ensureVideosBucketExists error: ${error.message}`);
+    colorLogger.error(`ensureVideosBucketExists error: ${error.message}`);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to setup storage');
   }
@@ -111,7 +111,7 @@ const ensureVideosBucketExists = async () => {
 //         return null; // No default video
 //       }
 
-//       logger.error(`Error fetching default video: ${error.message}`);
+//       colorLogger.error(`Error fetching default video: ${error.message}`);
 //       throw new ApiError(500, 'Failed to fetch default video');
 //     }
 
@@ -125,7 +125,7 @@ const ensureVideosBucketExists = async () => {
 //       createdAt: video.created_at
 //     };
 //   } catch (error) {
-//     logger.error(`getDefaultVideo error: ${error.message}`);
+//     colorLogger.error(`getDefaultVideo error: ${error.message}`);
 //     if (error instanceof ApiError) throw error;
 //     throw new ApiError(500, 'Failed to get default video');
 //   }
@@ -136,9 +136,10 @@ const ensureVideosBucketExists = async () => {
  * @param {string} userId - User ID
  * @param {Object} file - Video file
  * @param {string} videoType - Type of video ('default' or 'custom')
+ * @param {string} title - Title of the video (optional for default, required for custom)
  * @returns {Promise<Object>} Uploaded video data
  */
-const uploadVideo = async (userId, file, videoType) => {
+const uploadVideo = async (userId, file, videoType, title) => {
   const adminClient = getAdminClient();
 
   try {
@@ -163,6 +164,13 @@ const uploadVideo = async (userId, file, videoType) => {
       throw new ApiError(400, `Video exceeds maximum size of ${MAX_VIDEO_SIZE / (1024 * 1024)}MB`);
     }
 
+    // For custom videos, title is required
+    if (videoType === 'custom') {
+      if (!title || typeof title !== 'string' || !title.trim()) {
+        throw new ApiError(400, 'Title is required for custom videos');
+      }
+    }
+
     // Set default duration within the valid range
     // In a production environment, you would use a service like FFmpeg to extract the actual duration
     const duration = 25; // Default to 25 seconds
@@ -178,7 +186,7 @@ const uploadVideo = async (userId, file, videoType) => {
         .eq('is_active', true);
 
       if (findError) {
-        logger.warn(`Failed to find existing default videos: ${findError.message}`);
+        colorLogger.warn(`Failed to find existing default videos: ${findError.message}`);
       } else if (existingVideos && existingVideos.length > 0) {
         // Delete existing default videos from storage and database
         for (const existingVideo of existingVideos) {
@@ -190,10 +198,10 @@ const uploadVideo = async (userId, file, videoType) => {
                 .remove([existingVideo.storage_path]);
 
               if (storageError) {
-                logger.warn(`Failed to delete video file: ${storageError.message}`);
+                colorLogger.warn(`Failed to delete video file: ${storageError.message}`);
               }
             } catch (storageErr) {
-              logger.warn(`Exception deleting video file: ${storageErr.message}`);
+              colorLogger.warn(`Exception deleting video file: ${storageErr.message}`);
             }
           }
 
@@ -205,14 +213,14 @@ const uploadVideo = async (userId, file, videoType) => {
               .eq('id', existingVideo.id);
 
             if (deleteError) {
-              logger.warn(`Failed to delete video record: ${deleteError.message}`);
+              colorLogger.warn(`Failed to delete video record: ${deleteError.message}`);
             }
           } catch (deleteErr) {
-            logger.warn(`Exception deleting video record: ${deleteErr.message}`);
+            colorLogger.warn(`Exception deleting video record: ${deleteErr.message}`);
           }
         }
 
-        logger.info(
+        colorLogger.info(
           `Processed ${existingVideos.length} existing default videos for user ${userId}`
         );
       }
@@ -233,7 +241,7 @@ const uploadVideo = async (userId, file, videoType) => {
       });
 
     if (uploadError) {
-      logger.error(`Error uploading video: ${uploadError.message}`);
+      colorLogger.error(`Error uploading video: ${uploadError.message}`);
       throw new ApiError(500, 'Failed to upload video file');
     }
 
@@ -278,10 +286,10 @@ const uploadVideo = async (userId, file, videoType) => {
         });
 
       if (thumbnailError) {
-        logger.warn(`Failed to upload thumbnail: ${thumbnailError.message}`);
+        colorLogger.warn(`Failed to upload thumbnail: ${thumbnailError.message}`);
       }
     } catch (thumbnailErr) {
-      logger.warn(`Exception uploading thumbnail: ${thumbnailErr.message}`);
+      colorLogger.warn(`Exception uploading thumbnail: ${thumbnailErr.message}`);
     }
 
     // Get the public URL for the thumbnail
@@ -292,7 +300,7 @@ const uploadVideo = async (userId, file, videoType) => {
       } = adminClient.storage.from(VIDEO_BUCKET).getPublicUrl(thumbnailPath);
       thumbnailUrl = thumbUrl;
     } catch (thumbUrlErr) {
-      logger.warn(`Failed to get thumbnail URL: ${thumbUrlErr.message}`);
+      colorLogger.warn(`Failed to get thumbnail URL: ${thumbUrlErr.message}`);
     }
 
     // If thumbnail creation failed, use a fallback URL
@@ -316,6 +324,10 @@ const uploadVideo = async (userId, file, videoType) => {
       created_at: new Date().toISOString(),
       processed_at: new Date().toISOString()
     };
+    // Add title if present (required for custom, optional for default)
+    if (videoType === 'custom' || (title && typeof title === 'string' && title.trim())) {
+      videoData.title = title;
+    }
 
     const { data: videoRecord, error: insertError } = await adminClient
       .from('videos')
@@ -324,7 +336,7 @@ const uploadVideo = async (userId, file, videoType) => {
       .single();
 
     if (insertError) {
-      logger.error(`Error creating video record: ${insertError.message}`);
+      colorLogger.error(`Error creating video record: ${insertError.message}`);
 
       // Clean up the uploaded file
       try {
@@ -335,7 +347,7 @@ const uploadVideo = async (userId, file, videoType) => {
           await adminClient.storage.from(VIDEO_BUCKET).remove([thumbnailPath]);
         }
       } catch (cleanupErr) {
-        logger.warn(`Failed to clean up files after error: ${cleanupErr.message}`);
+        colorLogger.warn(`Failed to clean up files after error: ${cleanupErr.message}`);
       }
 
       throw new ApiError(500, 'Failed to create video record');
@@ -344,7 +356,7 @@ const uploadVideo = async (userId, file, videoType) => {
     // Update profile completion percentage
     await updateProfileCompletionPercentage(userId);
 
-    logger.info(`Video uploaded for user ${userId}: ${videoRecord.id}`);
+    colorLogger.info(`Video uploaded for user ${userId}: ${videoRecord.id}`);
 
     return {
       id: videoRecord.id,
@@ -352,10 +364,11 @@ const uploadVideo = async (userId, file, videoType) => {
       thumbnailUrl: videoRecord.thumbnail_url,
       duration: videoRecord.duration_seconds,
       videoType: videoRecord.video_type,
+      title: videoRecord.title || null,
       createdAt: videoRecord.created_at
     };
   } catch (error) {
-    logger.error(`uploadVideo error: ${error.message}`);
+    colorLogger.error(`uploadVideo error: ${error.message}`);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to upload video: ' + error.message);
   }
@@ -380,7 +393,7 @@ const deleteVideo = async (userId, videoId) => {
       .single();
 
     if (getError) {
-      logger.error(`Error finding video: ${getError.message}`);
+      colorLogger.error(`Error finding video: ${getError.message}`);
       throw new ApiError(404, 'Video not found or does not belong to user');
     }
 
@@ -394,7 +407,7 @@ const deleteVideo = async (userId, videoId) => {
         .remove([filePath]);
 
       if (deleteStorageError) {
-        logger.warn(`Could not delete file from storage: ${deleteStorageError.message}`);
+        colorLogger.warn(`Could not delete file from storage: ${deleteStorageError.message}`);
         // Continue anyway to delete the database record
       }
     }
@@ -403,7 +416,7 @@ const deleteVideo = async (userId, videoId) => {
     const { error: deleteError } = await adminClient.from('videos').delete().eq('id', videoId);
 
     if (deleteError) {
-      logger.error(`Error deleting video record: ${deleteError.message}`);
+      colorLogger.error(`Error deleting video record: ${deleteError.message}`);
       throw new ApiError(500, 'Failed to delete video record');
     }
 
@@ -412,11 +425,11 @@ const deleteVideo = async (userId, videoId) => {
       await updateProfileCompletionPercentage(userId);
     }
 
-    logger.info(`Video ${videoId} deleted for user ${userId}`);
+    colorLogger.info(`Video ${videoId} deleted for user ${userId}`);
 
     return true;
   } catch (error) {
-    logger.error(`deleteVideo error: ${error.message}`);
+    colorLogger.error(`deleteVideo error: ${error.message}`);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to delete video');
   }
@@ -444,7 +457,7 @@ const deleteVideo = async (userId, videoId) => {
 //       .order('created_at', { ascending: false });
 
 //     if (error) {
-//       logger.error(`Error fetching custom videos: ${error.message}`);
+//       colorLogger.error(`Error fetching custom videos: ${error.message}`);
 //       throw new ApiError(500, 'Failed to fetch custom videos');
 //     }
 
@@ -462,7 +475,7 @@ const deleteVideo = async (userId, videoId) => {
 //       createdAt: video.created_at
 //     }));
 //   } catch (error) {
-//     logger.error(`getCustomVideos error: ${error.message}`);
+//     colorLogger.error(`getCustomVideos error: ${error.message}`);
 //     if (error instanceof ApiError) throw error;
 //     throw new ApiError(500, 'Failed to get custom videos');
 //   }
@@ -492,7 +505,7 @@ const getVideoById = async (userId, videoId) => {
         return null; // No video found
       }
 
-      logger.error(`Error fetching video by ID: ${error.message}`);
+      colorLogger.error(`Error fetching video by ID: ${error.message}`);
       throw new ApiError(500, 'Failed to fetch video');
     }
 
@@ -506,7 +519,7 @@ const getVideoById = async (userId, videoId) => {
       createdAt: video.created_at
     };
   } catch (error) {
-    logger.error(`getVideoById error: ${error.message}`);
+    colorLogger.error(`getVideoById error: ${error.message}`);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to get video');
   }
@@ -533,13 +546,13 @@ const getAllVideos = async (userId) => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      logger.error(`Error fetching videos: ${error.message}`);
+      colorLogger.error(`Error fetching videos: ${error.message}`);
       throw new ApiError(500, 'Failed to fetch videos');
     }
 
     // Separate videos by type
     let defaultVideo = null;
-    const customVideos = [];
+    let customVideos = [];
 
     if (videos && videos.length > 0) {
       // Transform video data to client format
@@ -549,14 +562,43 @@ const getAllVideos = async (userId) => {
         thumbnailUrl: video.thumbnail_url,
         duration: video.duration_seconds,
         videoType: video.video_type,
-        createdAt: video.created_at
+        createdAt: video.created_at,
+        title : video.title
       }));
 
       // Find default video (should be only one)
       defaultVideo = formattedVideos.find((video) => video.videoType === 'default') || null;
 
       // Collect custom videos
-      customVideos.push(...formattedVideos.filter((video) => video.videoType === 'custom'));
+      customVideos = formattedVideos.filter((video) => video.videoType === 'custom');
+    }
+
+    // For each custom video, fetch all token codes attached to it
+    if (customVideos.length > 0) {
+      const videoIds = customVideos.map((v) => v.id);
+      const { data: tokens, error: tokensError } = await adminClient
+        .from('video_tokens')
+        .select('video_id, token_code')
+        .in('video_id', videoIds);
+
+      if (tokensError) {
+        colorLogger.warn(`Error fetching video tokens: ${tokensError.message}`);
+      }
+
+      // Map video_id to array of token codes
+      const videoIdToTokenCodes = {};
+      if (tokens && tokens.length > 0) {
+        for (const token of tokens) {
+          if (!videoIdToTokenCodes[token.video_id]) videoIdToTokenCodes[token.video_id] = [];
+          videoIdToTokenCodes[token.video_id].push(token.token_code);
+        }
+      }
+
+      // Attach tokenCodes array to each custom video
+      customVideos = customVideos.map((video) => ({
+        ...video,
+        tokenCodes: videoIdToTokenCodes[video.id] || []
+      }));
     }
 
     return {
@@ -564,9 +606,130 @@ const getAllVideos = async (userId) => {
       customVideos
     };
   } catch (error) {
-    logger.error(`getAllVideos error: ${error.message}`);
+    colorLogger.error(`getAllVideos error: ${error.message}`);
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, 'Failed to get videos');
+  }
+};
+
+/**
+ * Upload video file to storage only (without creating database record)
+ * @param {string} userId - User ID
+ * @param {Object} file - Video file
+ * @returns {Promise<Object>} Upload result with URLs and duration
+ */
+const uploadVideoToStorage = async (userId, file) => {
+  const adminClient = getAdminClient();
+
+  try {
+    // Ensure videos bucket exists
+    await ensureVideosBucketExists();
+
+    // Validate video
+    if (!file) {
+      throw new ApiError(400, 'No video file provided');
+    }
+
+    // Validate MIME type
+    if (!ALLOWED_VIDEO_MIME_TYPES.includes(file.mimetype)) {
+      throw new ApiError(
+        400,
+        `Invalid video format. Allowed formats: ${ALLOWED_VIDEO_MIME_TYPES.join(', ')}`
+      );
+    }
+
+    // Validate file size
+    if (file.size > MAX_VIDEO_SIZE) {
+      throw new ApiError(400, `Video exceeds maximum size of ${MAX_VIDEO_SIZE / (1024 * 1024)}MB`);
+    }
+
+    // Set default duration within the valid range
+    const duration = 25; // Default to 25 seconds
+
+    // Generate a unique filename
+    const fileExt = path.extname(file.originalname || 'video.webm').toLowerCase();
+    const fileName = `${uuidv4()}${fileExt}`;
+    const filePath = `${userId}/${fileName}`;
+
+    // Upload the file to Supabase Storage
+    const { data: uploadData, error: uploadError } = await adminClient.storage
+      .from(VIDEO_BUCKET)
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      colorLogger.error(`Error uploading video: ${uploadError.message}`);
+      throw new ApiError(500, 'Failed to upload video file');
+    }
+
+    // Get the public URL for the uploaded file
+    const {
+      data: { publicUrl }
+    } = adminClient.storage.from(VIDEO_BUCKET).getPublicUrl(filePath);
+
+    // Generate a thumbnail
+    const width = 640;
+    const height = 360;
+    const color = 'purple'; // Custom video color
+    const svg = `
+        <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100%" height="100%" fill="${color}" />
+          <text x="50%" y="50%" font-family="Arial" font-size="24" fill="white" text-anchor="middle" dominant-baseline="middle">
+            CUSTOM VIDEO
+          </text>
+        </svg>
+      `;
+
+    // Convert SVG to buffer
+    const svgBuffer = Buffer.from(svg);
+
+    // Upload the thumbnail to Supabase Storage
+    const thumbnailFileName = `${uuidv4()}.svg`;
+    const thumbnailPath = `${userId}/thumbnails/${thumbnailFileName}`;
+
+    // Upload the thumbnail
+    let thumbnailUrl = null;
+    try {
+      const { data: thumbnailData, error: thumbnailError } = await adminClient.storage
+        .from(VIDEO_BUCKET)
+        .upload(thumbnailPath, svgBuffer, {
+          contentType: 'image/svg+xml',
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (thumbnailError) {
+        colorLogger.warn(`Failed to upload thumbnail: ${thumbnailError.message}`);
+      } else {
+        // Get the public URL for the thumbnail
+        const {
+          data: { publicUrl: thumbUrl }
+        } = adminClient.storage.from(VIDEO_BUCKET).getPublicUrl(thumbnailPath);
+        thumbnailUrl = thumbUrl;
+      }
+    } catch (thumbnailErr) {
+      colorLogger.warn(`Exception uploading thumbnail: ${thumbnailErr.message}`);
+    }
+
+    // If thumbnail creation failed, use a fallback URL
+    if (!thumbnailUrl) {
+      thumbnailUrl = `https://via.placeholder.com/640x360/cccccc/ffffff?text=${encodeURIComponent('Custom Video')}`;
+    }
+
+    colorLogger.info(`Video uploaded to storage for user ${userId}: ${filePath}`);
+
+    return {
+      videoUrl: publicUrl,
+      thumbnailUrl,
+      duration
+    };
+  } catch (error) {
+    colorLogger.error(`uploadVideoToStorage error: ${error.message}`);
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, 'Failed to upload video to storage: ' + error.message);
   }
 };
 
@@ -577,5 +740,6 @@ module.exports = {
   getAllVideos,
   uploadVideo,
   deleteVideo,
-  ensureVideosBucketExists
+  ensureVideosBucketExists,
+  uploadVideoToStorage
 };

@@ -46,7 +46,9 @@ const options = {
     './src/modules/user/photo/photoRoute.js',
     './src/modules/user/photo/photoValidator.js',
     './src/modules/user/video/videoRoute.js',
-    './src/modules/user/video/videoValidator.js'
+    './src/modules/user/video/videoValidator.js',
+    './src/modules/token/tokenRoute.js',
+    './src/modules/token/tokenValidator.js',
   ]
 };
 
