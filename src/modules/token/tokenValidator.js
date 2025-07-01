@@ -79,53 +79,91 @@ const validateTokenId = [
 ];
 
 /**
- * Validate response submission
+ * Validator for token response submission
+ * - For all responses: name and interestLevel are required
+ * - For 'interested' responses: at least one contact method is required
+ * - For 'interested' responses with preferredContact: the specified contact method must be provided
  */
 const validateResponseSubmission = [
+  // Common fields for all response types
   body('name')
-    .trim()
     .notEmpty()
     .withMessage('Name is required')
-    .isLength({ max: 100 })
-    .withMessage('Name cannot exceed 100 characters'),
-  
-  body('email')
-    .optional()
+    .isString()
+    .withMessage('Name must be a string')
     .trim()
-    .isEmail()
-    .withMessage('Invalid email format')
-    .isLength({ max: 255 })
-    .withMessage('Email cannot exceed 255 characters'),
-  
-  body('phone')
-    .optional()
-    .trim()
-    .isLength({ max: 20 })
-    .withMessage('Phone number cannot exceed 20 characters'),
-  
-  body('instagram')
-    .optional()
-    .trim()
-    .isLength({ max: 100 })
-    .withMessage('Instagram handle cannot exceed 100 characters'),
-  
-  body('preferredContact')
-    .optional()
-    .isIn(['email', 'phone', 'instagram'])
-    .withMessage('Preferred contact method must be email, phone, or instagram'),
-  
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Name must be between 1 and 100 characters'),
+
   body('interestLevel')
-    .trim()
     .notEmpty()
     .withMessage('Interest level is required')
     .isIn(['interested', 'maybe_later', 'not_interested'])
-    .withMessage('Interest level must be interested, maybe_later, or not_interested'),
-  
+    .withMessage('Interest level must be "interested", "maybe_later", or "not_interested"'),
+
+  // Optional fields
+  body('email')
+    .optional({ nullable: true })
+    .isEmail()
+    .withMessage('Invalid email format')
+    .trim()
+    .normalizeEmail(),
+
+  body('phone')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Phone number must be a string')
+    .trim()
+    .isLength({ min: 5, max: 20 })
+    .withMessage('Phone number must be between 5 and 20 characters'),
+
+  body('instagram')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Instagram handle must be a string')
+    .trim()
+    .isLength({ min: 1, max: 30 })
+    .withMessage('Instagram handle must be between 1 and 30 characters'),
+
+  body('preferredContact')
+    .optional({ nullable: true })
+    .isIn(['email', 'phone', 'instagram'])
+    .withMessage('Preferred contact method must be "email", "phone", or "instagram"'),
+
   body('message')
-    .optional()
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('Message must be a string')
     .trim()
     .isLength({ max: 500 })
-    .withMessage('Message cannot exceed 500 characters')
+    .withMessage('Message must not exceed 500 characters'),
+
+  // Custom validation for interested responses
+  body().custom((body) => {
+    if (body.interestLevel === 'interested') {
+      // At least one contact method is required for interested responses
+      if (!body.email && !body.phone && !body.instagram) {
+        throw new Error(
+          'At least one contact method (email, phone, or Instagram) is required for interested responses'
+        );
+      }
+
+      // If preferred contact is specified, that contact method must be provided
+      if (body.preferredContact) {
+        if (body.preferredContact === 'email' && !body.email) {
+          throw new Error('Email is required when email is selected as preferred contact method');
+        } else if (body.preferredContact === 'phone' && !body.phone) {
+          throw new Error('Phone is required when phone is selected as preferred contact method');
+        } else if (body.preferredContact === 'instagram' && !body.instagram) {
+          throw new Error(
+            'Instagram is required when Instagram is selected as preferred contact method'
+          );
+        }
+      }
+    }
+
+    return true;
+  })
 ];
 
 /**

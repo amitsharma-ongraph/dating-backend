@@ -188,7 +188,7 @@ $$;
  *       200:
  *         description: Response submitted successfully
  *       400:
- *         description: Bad request or invalid token
+ *         description: Bad request, invalid input, or token already has a response
  *       404:
  *         description: Token not found
  */
@@ -198,6 +198,32 @@ router.post(
   tokenValidator.validateResponseSubmission,
   validateRequest,
   tokenController.submitTokenResponse
+);
+
+/**
+ * @swagger
+ * /tokens/{tokenId}/response/check:
+ *   get:
+ *     summary: Check if a token has a response
+ *     tags: [Tokens]
+ *     parameters:
+ *       - in: path
+ *         name: tokenId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The token ID
+ *     responses:
+ *       200:
+ *         description: Token response status checked successfully
+ *       404:
+ *         description: Token not found
+ */
+router.get(
+  '/:tokenId/response/check',
+  tokenValidator.validateTokenId,
+  validateRequest,
+  tokenController.checkTokenResponse
 );
 
 /**

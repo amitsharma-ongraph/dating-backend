@@ -603,6 +603,79 @@ const createCustomVideoAndToken = asyncHandler(async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/v1/tokens/{tokenId}/response/check:
+ *   get:
+ *     summary: Check if a token has a response
+ *     description: Public endpoint to check if a token already has a response
+ *     tags: [Tokens]
+ *     parameters:
+ *       - in: path
+ *         name: tokenId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The token ID
+ *     responses:
+ *       200:
+ *         description: Token response status checked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Token response status checked successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     hasResponse:
+ *                       type: boolean
+ *                       description: Whether the token has a response
+ *       404:
+ *         description: Token not found
+ *       500:
+ *         description: Server error
+ */
+const checkTokenResponse = asyncHandler(async (req, res) => {
+  const { tokenId } = req.params;
+
+  // Get token information
+  const { data: tokenData, error: tokenError } = await supabase
+    .from('video_tokens')
+    .select('id')
+    .eq('token_code', tokenId)
+    .single();
+
+  if (tokenError || !tokenData) {
+    colorLogger.error(`Error retrieving token ${tokenId}: ${tokenError?.message}`);
+    return ResponseHandler.error(res, 'Token not found', 404);
+  }
+
+  // Check if a response already exists for this token
+  const { data: existingResponse, error: existingResponseError } = await supabase
+    .from('viewer_responses')
+    .select('id')
+    .eq('video_token_id', tokenData.id)
+    .maybeSingle();
+
+  if (existingResponseError) {
+    colorLogger.error(`Error checking existing responses: ${existingResponseError.message}`);
+    return ResponseHandler.error(res, 'Failed to check token response status', 500);
+  }
+
+  return ResponseHandler.success(
+    res,
+    { hasResponse: !!existingResponse },
+    'Token response status checked successfully'
+  );
+});
+
 module.exports = {
   getProfileByToken,
   getVideoByToken,
@@ -611,5 +684,6 @@ module.exports = {
   assignVideoToToken,
   getTokenMetrics,
   getUserTokens,
-  createCustomVideoAndToken
+  createCustomVideoAndToken,
+  checkTokenResponse
 };

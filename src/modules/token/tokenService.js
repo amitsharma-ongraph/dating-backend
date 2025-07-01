@@ -152,6 +152,111 @@ const submitTokenResponse = async (tokenId, responseData, req) => {
   const clientIp = getClientIp(req);
   const userAgent = getUserAgent(req);
 
+  // Check if this is a profile token (starts with 'PRO-')
+  if (tokenId.startsWith('PRO-')) {
+    try {
+      // Find the profile by profile_token
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('profile_token', tokenId)
+        .single();
+
+      if (profileError || !profile) {
+        colorLogger.error(`Error retrieving profile for token ${tokenId}: ${profileError?.message}`);
+        throw new ApiError(404, 'Profile not found for this token');
+      }
+
+      // Additional validation for interested responses
+      if (interestLevel === 'interested') {
+        if (!email && !phone && !instagram) {
+          throw new ApiError(
+            400,
+            'At least one contact method (email, phone, or Instagram) is required for interested responses'
+          );
+        }
+        if (preferredContact) {
+          if (preferredContact === 'email' && !email) {
+            throw new ApiError(
+              400,
+              'Email is required when email is selected as preferred contact method'
+            );
+          } else if (preferredContact === 'phone' && !phone) {
+            throw new ApiError(
+              400,
+              'Phone is required when phone is selected as preferred contact method'
+            );
+          } else if (preferredContact === 'instagram' && !instagram) {
+            throw new ApiError(
+              400,
+              'Instagram is required when Instagram is selected as preferred contact method'
+            );
+          }
+        }
+      }
+
+      // Create the viewer response for profile
+      const viewerResponse = {
+        response_type: 'profile',
+        profile_id: profile.id,
+        interest_level: interestLevel,
+        viewer_name: name,
+        viewer_email: email || null,
+        viewer_phone: phone || null,
+        viewer_instagram: instagram || null,
+        preferred_contact_method: preferredContact || null,
+        message: message || null,
+        ip_address: clientIp,
+        user_agent: userAgent
+      };
+
+      // Insert response into viewer_responses table
+      const { data: response, error: responseError } = await supabase
+        .from('viewer_responses')
+        .insert(viewerResponse)
+        .select()
+        .single();
+
+      if (responseError) {
+        colorLogger.error(`Error creating profile response: ${responseError.message}`);
+        throw new ApiError(500, 'Failed to submit response');
+      }
+
+      // Create notification for the profile owner
+      let notificationTitle = `New Response: ${name}`;
+      let notificationMessage = '';
+      if (interestLevel === 'interested') {
+        notificationMessage = `${name} is interested in connecting with you!`;
+      } else if (interestLevel === 'maybe_later') {
+        notificationMessage = `${name} might be interested later.`;
+      } else {
+        notificationMessage = `${name} is not interested at this time.`;
+      }
+
+      await supabase.from('notifications').insert({
+        user_id: profile.id, // profile.id is the user_id in this context
+        type: 'interested_response',
+        title: notificationTitle,
+        message: notificationMessage,
+        metadata: {
+          response_id: response.id,
+          profile_id: profile.id,
+          interest_level: interestLevel
+        }
+      });
+
+      return {
+        id: response.id,
+        interestLevel,
+        success: true
+      };
+    } catch (error) {
+      colorLogger.error(`Error in submitTokenResponse (profile): ${error.message}`);
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(error.statusCode || 500, error.message || 'Failed to submit response');
+    }
+  }
+
   try {
     // Get token information
     const { data: tokenData, error: tokenError } = await supabase
@@ -168,6 +273,53 @@ const submitTokenResponse = async (tokenId, responseData, req) => {
     // Check if token is valid
     if (tokenData.status !== 'active' && tokenData.status !== 'viewed') {
       throw new ApiError(400, `Token is ${tokenData.status.toLowerCase()}`);
+    }
+
+    // Check if a response already exists for this token
+    const { data: existingResponse, error: existingResponseError } = await supabase
+      .from('viewer_responses')
+      .select('id')
+      .eq('video_token_id', tokenData.id)
+      .maybeSingle();
+
+    if (existingResponseError) {
+      colorLogger.error(`Error checking existing responses: ${existingResponseError.message}`);
+      throw new ApiError(500, 'Failed to check existing responses');
+    }
+
+    if (existingResponse) {
+      throw new ApiError(400, 'A response has already been submitted for this token');
+    }
+
+    // Additional validation for interested responses
+    if (interestLevel === 'interested') {
+      // Require at least one contact method for interested responses
+      if (!email && !phone && !instagram) {
+        throw new ApiError(
+          400,
+          'At least one contact method (email, phone, or Instagram) is required for interested responses'
+        );
+      }
+
+      // Validate preferred contact method is provided and matches available contact methods
+      if (preferredContact) {
+        if (preferredContact === 'email' && !email) {
+          throw new ApiError(
+            400,
+            'Email is required when email is selected as preferred contact method'
+          );
+        } else if (preferredContact === 'phone' && !phone) {
+          throw new ApiError(
+            400,
+            'Phone is required when phone is selected as preferred contact method'
+          );
+        } else if (preferredContact === 'instagram' && !instagram) {
+          throw new ApiError(
+            400,
+            'Instagram is required when Instagram is selected as preferred contact method'
+          );
+        }
+      }
     }
 
     // Create the viewer response
@@ -207,12 +359,23 @@ const submitTokenResponse = async (tokenId, responseData, req) => {
       metadata: { interest_level: interestLevel }
     });
 
-    // Create notification for the token owner
+    // Create notification for the token owner with appropriate message based on interest level
+    let notificationTitle = `New Response: ${name}`;
+    let notificationMessage = '';
+
+    if (interestLevel === 'interested') {
+      notificationMessage = `${name} is interested in connecting with you!`;
+    } else if (interestLevel === 'maybe_later') {
+      notificationMessage = `${name} might be interested later.`;
+    } else {
+      notificationMessage = `${name} is not interested at this time.`;
+    }
+
     await supabase.from('notifications').insert({
       user_id: tokenData.user_id,
       type: 'interested_response',
-      title: `New Response: ${name}`,
-      message: `${name} is ${interestLevel.replace('_', ' ')} in connecting with you.`,
+      title: notificationTitle,
+      message: notificationMessage,
       metadata: {
         response_id: response.id,
         token_id: tokenData.id,
@@ -220,7 +383,11 @@ const submitTokenResponse = async (tokenId, responseData, req) => {
       }
     });
 
-    return { id: response.id };
+    return {
+      id: response.id,
+      interestLevel,
+      success: true
+    };
   } catch (error) {
     colorLogger.error(`Error in submitTokenResponse: ${error.message}`);
     if (error instanceof ApiError) throw error;
@@ -530,10 +697,12 @@ const getUserTokens = async (userId, options = {}) => {
       throw new ApiError(500, 'Failed to retrieve tokens');
     }
 
-    // Get all token IDs for activity logs
+    // Get all token IDs for activity logs and responses
     const tokenIds = tokens.map((t) => t.id);
     let activityLogsByToken = {};
+    let responsesByToken = {};
     if (tokenIds.length > 0) {
+      // Fetch activity logs
       const { data: logs, error: logsError } = await supabase
         .from('token_activity_logs')
         .select('*')
@@ -548,9 +717,23 @@ const getUserTokens = async (userId, options = {}) => {
           activityLogsByToken[log.video_token_id].push(log);
         }
       }
+      // Fetch viewer responses
+      const { data: responses, error: responsesError } = await supabase
+        .from('viewer_responses')
+        .select('*')
+        .in('video_token_id', tokenIds);
+      if (responsesError) {
+        colorLogger.warn(`Error fetching viewer responses: ${responsesError.message}`);
+      }
+      if (responses && responses.length > 0) {
+        for (const response of responses) {
+          if (!responsesByToken[response.video_token_id]) responsesByToken[response.video_token_id] = [];
+          responsesByToken[response.video_token_id].push(response);
+        }
+      }
     }
 
-    // Format tokens with video and activity logs
+    // Format tokens with video, activity logs, and responses
     const formattedTokens = tokens.map((token) => {
       let video = null;
       if (token.videos) {
@@ -574,7 +757,8 @@ const getUserTokens = async (userId, options = {}) => {
         privateLabel: token.private_label,
         privateNotes: token.private_notes,
         video,
-        activityLogs: activityLogsByToken[token.id] || []
+        activityLogs: activityLogsByToken[token.id] || [],
+        responses: responsesByToken[token.id] || []
       };
     });
 
