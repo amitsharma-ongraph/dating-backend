@@ -442,7 +442,7 @@ const handleVideoUpload = (req, res, next) => {
  *                 description: Optional private notes for the token
  *               daysValid:
  *                 type: integer
- *                 description: Number of days the token is valid (default: 3)
+ *                 description: "Number of days the token is valid (default: 3)"
  *     responses:
  *       201:
  *         description: Custom video and token created successfully

@@ -11,7 +11,12 @@ const ApiError = require('../../utils/apiError');
  */
 const getClientIp = (req) => {
   try {
-    return req.headers['x-forwarded-for'] || req.socket.remoteAddress || null;
+    const xff = req.headers['x-forwarded-for'];
+    if (xff) {
+      // x-forwarded-for can be a comma-separated list, take the first one
+      return xff.split(',')[0].trim();
+    }
+    return req.socket.remoteAddress || null;
   } catch (error) {
     colorLogger.warn('Failed to get client IP:', error);
     return null;
