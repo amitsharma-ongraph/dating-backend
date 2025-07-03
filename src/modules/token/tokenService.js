@@ -846,6 +846,39 @@ const createCustomVideoWithToken = async ({
   }
 };
 
+/**
+ * Get a preview of a token (profile or video) for the owner, without logging or status update
+ * @param {string} tokenId - Token ID (profile or video)
+ * @param {string} userId - User ID (must own the token)
+ * @returns {Promise<Object>} Preview data
+ */
+const getTokenPreview = async (tokenId, userId) => {
+  if (!tokenId) {
+    throw new ApiError(400, 'Token ID is required');
+  }
+  if (!userId) {
+    throw new ApiError(400, 'User ID is required');
+  }
+  try {
+    const { data, error } = await supabase.rpc('get_token_preview', {
+      p_token_code: tokenId,
+      p_user_id: userId
+    });
+    if (error) {
+      colorLogger.error(`Error in getTokenPreview: ${error.message}`);
+      throw new ApiError(404, 'Token not found or invalid');
+    }
+    if (!data.success) {
+      throw new ApiError(403, data.error || 'Failed to preview token');
+    }
+    return data;
+  } catch (error) {
+    colorLogger.error(`Error in getTokenPreview: ${error.message}`);
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(500, 'Failed to preview token');
+  }
+};
+
 module.exports = {
   getProfileByToken,
   getVideoByToken,
@@ -854,5 +887,6 @@ module.exports = {
   assignVideoToToken,
   getTokenMetrics,
   getUserTokens,
-  createCustomVideoWithToken
+  createCustomVideoWithToken,
+  getTokenPreview
 };

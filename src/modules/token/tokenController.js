@@ -676,6 +676,39 @@ const checkTokenResponse = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * @swagger
+ * /api/v1/tokens/preview/{tokenId}:
+ *   get:
+ *     summary: Preview a token (profile or video) as the owner
+ *     description: Get a preview of the profile or video token without logging or status update. Only the owner can preview.
+ *     tags: [Tokens]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tokenId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The token ID
+ *     responses:
+ *       200:
+ *         description: Token preview retrieved successfully
+ *       403:
+ *         description: Forbidden (not owner)
+ *       404:
+ *         description: Token not found
+ *       500:
+ *         description: Server error
+ */
+const getTokenPreview = asyncHandler(async (req, res) => {
+  const { tokenId } = req.params;
+  const userId = req.user.id;
+  const previewData = await tokenService.getTokenPreview(tokenId, userId);
+  return ResponseHandler.success(res, previewData, 'Token preview retrieved successfully');
+});
+
 module.exports = {
   getProfileByToken,
   getVideoByToken,
@@ -685,5 +718,6 @@ module.exports = {
   getTokenMetrics,
   getUserTokens,
   createCustomVideoAndToken,
-  checkTokenResponse
+  checkTokenResponse,
+  getTokenPreview
 };

@@ -454,4 +454,37 @@ router.post(
   tokenController.createCustomVideoAndToken
 );
 
+/**
+ * @swagger
+ * /tokens/preview/{tokenId}:
+ *   get:
+ *     summary: Preview a token (profile or video) as the owner
+ *     tags: [Tokens]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tokenId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The token ID
+ *     responses:
+ *       200:
+ *         description: Token preview retrieved successfully
+ *       403:
+ *         description: Forbidden (not owner)
+ *       404:
+ *         description: Token not found
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  '/preview/:tokenId',
+  authenticate,
+  tokenValidator.validateTokenId,
+  validateRequest,
+  tokenController.getTokenPreview
+);
+
 module.exports = router;
